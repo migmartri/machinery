@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"strings"
 	"sync"
 	"time"
 
@@ -33,21 +32,16 @@ type BackendGR struct {
 }
 
 // NewGR creates Backend instance
-func NewGR(cnf *config.Config, addrs []string, db int) iface.Backend {
+func NewGR(cnf *config.Config, addrs []string, passsword string, db int) iface.Backend {
 	b := &BackendGR{
-		Backend: common.NewBackend(cnf),
-	}
-	parts := strings.Split(addrs[0], "@")
-	if len(parts) == 2 {
-		// with passwrod
-		b.password = parts[0]
-		addrs[0] = parts[1]
+		Backend:  common.NewBackend(cnf),
+		password: passsword,
 	}
 
 	ropt := &redis.UniversalOptions{
 		Addrs:    addrs,
 		DB:       db,
-		Password: b.password,
+		Password: passsword,
 	}
 	if cnf.Redis != nil {
 		ropt.MasterName = cnf.Redis.MasterName

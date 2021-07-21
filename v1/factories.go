@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -44,28 +45,15 @@ func BrokerFactory(cnf *config.Config) (brokeriface.Broker, error) {
 	}
 
 	if strings.HasPrefix(cnf.Broker, "redis://") || strings.HasPrefix(cnf.Broker, "rediss://") {
-		var scheme string
-		if strings.HasPrefix(cnf.Broker, "redis://") {
-			scheme = "redis://"
-		} else {
-			scheme = "rediss://"
+		brokers, redisPassword, redisDB, err := ParseRedisURL(cnf.Broker)
+		if err != nil {
+			return nil, err
 		}
-		parts := strings.Split(cnf.Broker, scheme)
-		if len(parts) != 2 {
-			return nil, fmt.Errorf(
-				"Redis broker connection string should be in format %shost:port, instead got %s", scheme,
-				cnf.Broker,
-			)
-		}
-		brokers := strings.Split(parts[1], ",")
+
 		if len(brokers) > 1 {
-			return redisbroker.NewGR(cnf, brokers, 0), nil
+			return redisbroker.NewGR(cnf, brokers, redisPassword, 0), nil
 		} else {
-			redisHost, redisPassword, redisDB, err := ParseRedisURL(cnf.Broker)
-			if err != nil {
-				return nil, err
-			}
-			return redisbroker.New(cnf, redisHost, redisPassword, "", redisDB), nil
+			return redisbroker.New(cnf, brokers[0], redisPassword, "", redisDB), nil
 		}
 	}
 
@@ -132,24 +120,14 @@ func BackendFactory(cnf *config.Config) (backendiface.Backend, error) {
 	}
 
 	if strings.HasPrefix(cnf.ResultBackend, "redis://") || strings.HasPrefix(cnf.ResultBackend, "rediss://") {
-		var scheme string
-		if strings.HasPrefix(cnf.ResultBackend, "redis://") {
-			scheme = "redis://"
-		} else {
-			scheme = "rediss://"
+		redisHosts, redisPassword, redisDB, err := ParseRedisURL(cnf.ResultBackend)
+		if err != nil {
+			return nil, err
 		}
-		parts := strings.Split(cnf.ResultBackend, scheme)
-		addrs := strings.Split(parts[1], ",")
-		if len(addrs) > 1 {
-			return redisbackend.NewGR(cnf, addrs, 0), nil
+		if len(redisHosts) > 1 {
+			return redisbackend.NewGR(cnf, redisHosts, redisPassword, 0), nil
 		} else {
-			redisHost, redisPassword, redisDB, err := ParseRedisURL(cnf.ResultBackend)
-
-			if err != nil {
-				return nil, err
-			}
-
-			return redisbackend.New(cnf, redisHost, redisPassword, "", redisDB), nil
+			return redisbackend.New(cnf, redisHosts[0], redisPassword, "", redisDB), nil
 		}
 	}
 
@@ -183,19 +161,27 @@ func BackendFactory(cnf *config.Config) (backendiface.Backend, error) {
 }
 
 // ParseRedisURL ...
-func ParseRedisURL(url string) (host, password string, db int, err error) {
-	// redis://pwd@host/db
-
+func ParseRedisURL(url string) (hosts []string, password string, db int, err error) {
+	// redis://pwd@host:port/db
+	// redis://pwd@host1:port1,host2:port2
 	var u *neturl.URL
 	u, err = neturl.Parse(url)
 	if err != nil {
 		return
 	}
-	if u.Scheme != "redis" && u.Scheme != "rediss" {
+
+	// u.Scheme does not fail if the prefix is redis:/ (single slash)
+	if match, _ := regexp.MatchString("^rediss?://", url); !match {
 		err = errors.New("No redis scheme found")
 		return
 	}
 
+	if u.Scheme != "redis" && u.Scheme != "rediss" {
+		err = errors.New("No redis scheme found")
+		return
+	}
+	// Fallback support for redis version < 6.x where username was not supported
+	// NOTE: This code does not support redis 6.x+ format which indeed includes both username and password
 	if u.User != nil {
 		var exists bool
 		password, exists = u.User.Password()
@@ -204,15 +190,17 @@ func ParseRedisURL(url string) (host, password string, db int, err error) {
 		}
 	}
 
-	host = u.Host
+	hosts = strings.Split(u.Host, ",")
 
-	parts := strings.Split(u.Path, "/")
-	if len(parts) == 1 {
-		db = 0 //default redis db
-	} else {
-		db, err = strconv.Atoi(parts[1])
-		if err != nil {
-			db, err = 0, nil //ignore err here
+	// Extract the database from the first host
+	// If there are more than 1 hosts, setting the DB is not configurable and will fallback to 0
+	if len(hosts) == 1 {
+		parts := strings.Split(u.Path, "/")
+		if len(parts) == 2 {
+			db, err = strconv.Atoi(parts[1])
+			if err != nil {
+				return
+			}
 		}
 	}
 

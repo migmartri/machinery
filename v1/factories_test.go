@@ -25,11 +25,12 @@ import (
 
 var (
 	redisSchemeTestCases = []struct {
-		desc      string
-		url       string
-		host, pwd string
-		db        int
-		err       error
+		desc  string
+		url   string
+		hosts []string
+		pwd   string
+		db    int
+		err   error
 	}{
 		{
 			desc: "invalid redis scheme",
@@ -39,48 +40,66 @@ var (
 		{
 			desc: "empty redis scheme",
 			url:  "redis:/",
+			err:  errors.New("invalid redis scheme"),
 		},
 		{
-			desc: "redis host",
-			url:  "redis://127.0.0.1:5672",
-			host: "127.0.0.1:5672",
+			desc:  "redis host",
+			url:   "redis://127.0.0.1:5672",
+			hosts: []string{"127.0.0.1:5672"},
 		},
 		{
-			desc: "redis password and host",
-			url:  "redis://pwd@127.0.0.1:5672",
-			host: "127.0.0.1:5672",
-			pwd:  "pwd",
+			desc:  "redis password and host",
+			url:   "redis://pwd@127.0.0.1:5672",
+			hosts: []string{"127.0.0.1:5672"},
+			pwd:   "pwd",
 		},
 		{
-			desc: "redis password, host and db",
-			url:  "redis://pwd@127.0.0.1:5672/2",
-			host: "127.0.0.1:5672",
-			pwd:  "pwd",
-			db:   2,
+			desc:  "redis password, host and db",
+			url:   "redis://pwd@127.0.0.1:5672/2",
+			hosts: []string{"127.0.0.1:5672"},
+			pwd:   "pwd",
+			db:    2,
 		},
 		{
-			desc: "redis user, password host",
-			url:  "redis://user:pwd@127.0.0.1:5672",
-			host: "127.0.0.1:5672",
-			pwd:  "pwd",
+			desc:  "redis user, password host",
+			url:   "redis://user:pwd@127.0.0.1:5672",
+			hosts: []string{"127.0.0.1:5672"},
+			pwd:   "pwd",
 		},
 		{
-			desc: "redis user, password with colon host",
-			url:  "redis://user:pwd:with:colon@127.0.0.1:5672",
-			host: "127.0.0.1:5672",
-			pwd:  "pwd:with:colon",
+			desc:  "redis user, password with colon host",
+			url:   "redis://user:pwd:with:colon@127.0.0.1:5672",
+			hosts: []string{"127.0.0.1:5672"},
+			pwd:   "pwd:with:colon",
 		},
 		{
-			desc: "redis user, empty password and host",
-			url:  "redis://user:@127.0.0.1:5672",
-			host: "127.0.0.1:5672",
-			pwd:  "",
+			desc:  "redis user, empty password and host",
+			url:   "redis://user:@127.0.0.1:5672",
+			hosts: []string{"127.0.0.1:5672"},
+			pwd:   "",
 		},
 		{
-			desc: "redis empty user, password and host",
-			url:  "redis://:pwd@127.0.0.1:5672",
-			host: "127.0.0.1:5672",
-			pwd:  "pwd",
+			desc:  "redis empty user, password and host",
+			url:   "redis://:pwd@127.0.0.1:5672",
+			hosts: []string{"127.0.0.1:5672"},
+			pwd:   "pwd",
+		},
+		{
+			desc:  "multiple hosts",
+			url:   "redis://host1:5671,host2:5672",
+			hosts: []string{"host1:5671", "host2:5672"},
+		},
+		{
+			desc:  "redis password, multiple hosts",
+			url:   "redis://pwd@host1:5671,host2:5672",
+			hosts: []string{"host1:5671", "host2:5672"},
+			pwd:   "pwd",
+		},
+		{
+			desc:  "multiple hosts, ignored DB",
+			url:   "redis://host1:5671,host2:5672/2",
+			hosts: []string{"host1:5671", "host2:5672"},
+			db:    0,
 		},
 	}
 )
@@ -414,14 +433,14 @@ func TestParseRedisURL(t *testing.T) {
 		t.Run(tc.desc, func(t *testing.T) {
 			t.Parallel()
 
-			host, pwd, db, err := machinery.ParseRedisURL(tc.url)
+			hosts, pwd, db, err := machinery.ParseRedisURL(tc.url)
 			if tc.err != nil {
 				assert.Error(t, err, tc.err)
 				return
 			}
 
 			if assert.NoError(t, err) {
-				assert.Equal(t, tc.host, host)
+				assert.Equal(t, tc.hosts, hosts)
 				assert.Equal(t, tc.pwd, pwd)
 				assert.Equal(t, tc.db, db)
 			}

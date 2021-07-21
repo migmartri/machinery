@@ -1,10 +1,11 @@
 package redis_test
 
 import (
-	"github.com/RichardKnop/machinery/v1/backends/iface"
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/RichardKnop/machinery/v1/backends/iface"
 
 	"github.com/RichardKnop/machinery/v1/backends/redis"
 	"github.com/RichardKnop/machinery/v1/config"
@@ -19,7 +20,7 @@ func getRedisG() iface.Backend {
 	if redisURL == "" {
 		return nil
 	}
-	backend := redis.NewGR(new(config.Config), strings.Split(redisURL, ","), 0)
+	backend := redis.NewGR(new(config.Config), strings.Split(redisURL, ","), "", 0)
 	return backend
 }
 
