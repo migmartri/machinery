@@ -3,7 +3,6 @@ package redis
 import (
 	"errors"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/RichardKnop/machinery/v1/config"
@@ -20,19 +19,11 @@ type Lock struct {
 	interval time.Duration
 }
 
-func New(cnf *config.Config, addrs []string, db, retries int) Lock {
+func New(cnf *config.Config, addrs []string, password string, db, retries int) Lock {
 	if retries <= 0 {
 		return Lock{}
 	}
 	lock := Lock{retries: retries}
-
-	var password string
-
-	parts := strings.Split(addrs[0], "@")
-	if len(parts) == 2 {
-		password = parts[0]
-		addrs[0] = parts[1]
-	}
 
 	ropt := &redis.UniversalOptions{
 		Addrs:    addrs,

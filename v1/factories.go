@@ -176,12 +176,7 @@ func ParseRedisURL(url string) (hosts []string, password string, db int, err err
 		return
 	}
 
-	if u.Scheme != "redis" && u.Scheme != "rediss" {
-		err = errors.New("No redis scheme found")
-		return
-	}
-	// Fallback support for redis version < 6.x where username was not supported
-	// NOTE: This code does not support redis 6.x+ format which indeed includes both username and password
+	// NOTE: This code does not support redis 6.x+ format which includes both username and password
 	if u.User != nil {
 		var exists bool
 		password, exists = u.User.Password()
@@ -192,12 +187,12 @@ func ParseRedisURL(url string) (hosts []string, password string, db int, err err
 
 	hosts = strings.Split(u.Host, ",")
 
-	// Extract the database from the first host
+	// Extract the database number from the first host
 	// If there are more than 1 hosts, setting the DB is not configurable and will fallback to 0
 	if len(hosts) == 1 {
-		parts := strings.Split(u.Path, "/")
-		if len(parts) == 2 {
-			db, err = strconv.Atoi(parts[1])
+		paths := strings.Split(u.Path, "/")
+		if len(paths) == 2 {
+			db, err = strconv.Atoi(paths[1])
 			if err != nil {
 				return
 			}
@@ -210,19 +205,13 @@ func ParseRedisURL(url string) (hosts []string, password string, db int, err err
 // LockFactory creates a new object of iface.Lock
 // Currently supported lock is redis
 func LockFactory(cnf *config.Config) (lockiface.Lock, error) {
-	if strings.HasPrefix(cnf.Lock, "eager") {
-		return eagerlock.New(), nil
-	}
-	if strings.HasPrefix(cnf.Lock, "redis://") {
-		parts := strings.Split(cnf.Lock, "redis://")
-		if len(parts) != 2 {
-			return nil, fmt.Errorf(
-				"Redis broker connection string should be in format redis://host:port, instead got %s",
-				cnf.Lock,
-			)
+	if match, _ := regexp.MatchString("^rediss?://", cnf.Lock); match {
+		redisHosts, redisPassword, redisDB, err := ParseRedisURL(cnf.Lock)
+		if err != nil {
+			return nil, err
 		}
-		locks := strings.Split(parts[1], ",")
-		return redislock.New(cnf, locks, 0, 3), nil
+
+		return redislock.New(cnf, redisHosts, redisPassword, redisDB, 3), nil
 	}
 
 	// Lock is required for periodic tasks to work, therefor return in memory lock in case none is configured

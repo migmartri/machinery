@@ -48,6 +48,11 @@ var (
 			hosts: []string{"127.0.0.1:5672"},
 		},
 		{
+			desc:  "redis secure host",
+			url:   "rediss://127.0.0.1:5672",
+			hosts: []string{"127.0.0.1:5672"},
+		},
+		{
 			desc:  "redis password and host",
 			url:   "redis://pwd@127.0.0.1:5672",
 			hosts: []string{"127.0.0.1:5672"},
